@@ -1,27 +1,24 @@
-FROM ghcr.io/openfaas/classic-watchdog:0.1.4 as watchdog
+FROM openfaas/classic-watchdog:0.18.0 as watchdog
 
-FROM alpine:3.12
-
-RUN mkdir -p /home/app
+FROM perl:5-slim
 
 COPY --from=watchdog /fwatchdog /usr/bin/fwatchdog
 RUN chmod +x /usr/bin/fwatchdog
 
-# Add non root user
-RUN addgroup -S app && adduser app -S -G app
-RUN chown app /home/app
+RUN cpanm Carton
 
-WORKDIR /home/app
+RUN useradd -m app && usermod -G app app
+WORKDIR /home/app/
 
+COPY cpanfile .
+RUN carton install
+COPY main.pl .
+COPY function function
+
+RUN chown app:app -R /home/app
 USER app
 
-# Populate example here - i.e. "cat", "sha512sum" or "node index.js"
-ENV fprocess="cat"
-# Set to true to see request in function logs
-ENV write_debug="false"
+ENV fprocess="carton exec perl main.pl"
 
-EXPOSE 8080
-
-HEALTHCHECK --interval=3s CMD [ -e /tmp/.lock ] || exit 1
-
+HEALTHCHECK --interval=5s CMD [ -e /tmp/.lock ] || exit 1
 CMD ["fwatchdog"]
